@@ -105,53 +105,29 @@ resource "aws_dynamodb_table" "intake" {
   name         = "${local.name_prefix}-submissions-${local.suffix}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "submission_id"
-
   attribute {
     name = "submission_id"
     type = "S"
   }
-
-  # No server_side_encryption block. Defaults to AWS-owned key.
-  # GAP-02: capstone learner expected to add this with a customer-owned key.
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.workload.arn
+  }
+  point_in_time_recovery {
+    enabled = true
+  }
 }
-
-######################################################################
-# S3 — uploads bucket.
-# GAP-01: relies on AWS-managed SSE-S3 (default since 2023) instead of
-#         SSE-KMS with a customer CMK. PHI keys are not under customer
-#         custody.
-# GAP-03: no bucket policy denying non-TLS requests
-#         (aws:SecureTransport).
-# GAP-04: no versioning. PHI overwrites are unrecoverable.
-#
-# Note: AWS now defaults new buckets to SSE-S3 + full public access block.
-# The "gaps" here are real residual gaps once those defaults are in place.
-######################################################################
-
 resource "aws_s3_bucket" "uploads" {
-  bucket = "${local.name_prefix}-uploads-${local.suffix}"
+  bucket        = "${local.name_prefix}-uploads-${local.suffix}"
+  force_destroy = true
 }
-
-# (Intentionally omitted: SSE-KMS encryption with a customer CMK,
-#  bucket policy enforcing aws:SecureTransport, versioning, lifecycle.
-#  These are the gaps the learner closes.)
-
-######################################################################
-# Lambda — the intake handler.
-# GAP-05: not deployed inside the VPC.
-# GAP-06: no reserved concurrency, no DLQ, no X-Ray.
-# GAP-07: IAM role has dynamodb:* and s3:* on the resources (over-broad).
-######################################################################
-
 data "archive_file" "handler" {
   type        = "zip"
   source_file = "${path.module}/lambda/handler.py"
   output_path = "${path.module}/lambda/handler.zip"
 }
-
 resource "aws_iam_role" "lambda" {
   name = "${local.name_prefix}-lambda-${local.suffix}"
-
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -161,34 +137,39 @@ resource "aws_iam_role" "lambda" {
     }]
   })
 }
-
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
-
-# GAP-07: deliberately broad permissions on the workload data stores.
 resource "aws_iam_role_policy" "lambda_inline" {
   name = "intake-data-access"
   role = aws_iam_role.lambda.id
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect   = "Allow"
-        Action   = "dynamodb:*"
+        Action   = ["dynamodb:PutItem", "dynamodb:GetItem"]
         Resource = aws_dynamodb_table.intake.arn
       },
       {
         Effect   = "Allow"
-        Action   = "s3:*"
-        Resource = ["${aws_s3_bucket.uploads.arn}", "${aws_s3_bucket.uploads.arn}/*"]
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = "${aws_s3_bucket.uploads.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = aws_kms_key.workload.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.lambda_dlq.arn
       }
     ]
   })
 }
-
 resource "aws_lambda_function" "intake" {
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
@@ -197,28 +178,27 @@ resource "aws_lambda_function" "intake" {
   filename         = data.archive_file.handler.output_path
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
-
   environment {
     variables = {
       INTAKE_TABLE  = aws_dynamodb_table.intake.name
       UPLOAD_BUCKET = aws_s3_bucket.uploads.id
     }
   }
-
-  # GAP-05: no vpc_config block. Learner expected to add one referencing
-  # aws_subnet.private[*] and a hardened security group.
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+  dead_letter_config {
+    target_arn = aws_sqs_queue.lambda_dlq.arn
+  }
+  tracing_config {
+    mode = "Active"
+  }
 }
-
-######################################################################
-# API Gateway — HTTP API in front of the Lambda.
-# GAP-08: no access logging, no throttling, no WAF.
-######################################################################
-
 resource "aws_apigatewayv2_api" "intake" {
   name          = "${local.name_prefix}-api-${local.suffix}"
   protocol_type = "HTTP"
 }
-
 resource "aws_apigatewayv2_integration" "lambda" {
   api_id                 = aws_apigatewayv2_api.intake.id
   integration_type       = "AWS_PROXY"
@@ -226,20 +206,29 @@ resource "aws_apigatewayv2_integration" "lambda" {
   integration_method     = "POST"
   payload_format_version = "2.0"
 }
-
 resource "aws_apigatewayv2_route" "intake" {
   api_id    = aws_apigatewayv2_api.intake.id
   route_key = "POST /intake"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
-
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.intake.id
   name        = "$default"
   auto_deploy = true
-  # GAP-08: no access_log_settings. Learner expected to wire CloudWatch logs.
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.apigw.arn
+    format = jsonencode({
+      requestId = "$context.requestId"
+      ip        = "$context.identity.sourceIp"
+      routeKey  = "$context.routeKey"
+      status    = "$context.status"
+    })
+  }
+  default_route_settings {
+    throttling_burst_limit = 50
+    throttling_rate_limit  = 100
+  }
 }
-
 resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"

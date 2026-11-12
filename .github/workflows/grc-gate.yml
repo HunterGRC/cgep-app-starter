@@ -1,0 +1,56 @@
+name: grc-gate
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  grc-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - uses: sigstore/cosign-installer@v3
+      - name: Install Conftest
+        run: |
+          curl -sL https://github.com/open-policy-agent/conftest/releases/download/v0.56.0/conftest_0.56.0_Linux_x86_64.tar.gz | sudo tar -xz -C /usr/local/bin conftest
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Plan
+        run: |
+          cd terraform
+          terraform init -input=false
+          terraform plan -out=tfplan -input=false
+          terraform show -json tfplan > plan.json
+      - name: Policy check
+        run: |
+          conftest test terraform/plan.json -p policies
+      - name: Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan
+      - name: Sign
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          RUN_ID="${GITHUB_RUN_ID}"
+          bash scripts/capture-evidence.sh "$RUN_ID"
+          cosign sign-blob --yes \
+            --bundle "evidence-${RUN_ID}.tar.gz.sig.bundle" \
+            "evidence-${RUN_ID}.tar.gz"
+      - name: Upload
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          RUN_ID="${GITHUB_RUN_ID}"
+          VAULT="${{ vars.EVIDENCE_VAULT }}"
+          for f in "evidence-${RUN_ID}.tar.gz" "evidence-${RUN_ID}.tar.gz.sha256" "evidence-${RUN_ID}.tar.gz.sig.bundle"; do
+            aws s3 cp "$f" "s3://${VAULT}/runs/${RUN_ID}/${f}"
+          done
