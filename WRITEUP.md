@@ -30,3 +30,12 @@ EVIDENCE_VAULT="<vault-bucket-name>" bash scripts/verify-evidence.sh "<RUN_ID>"
 
 
 This confirms S3 Object Lock (GOVERNANCE), SHA-256 digest, and Sigstore OIDC identity, outputting CHAIN INTACT.
+
+## 5. Design Trade-Offs
+- **Gateway Endpoints vs. NAT Gateway:** Used S3/DynamoDB Gateway Endpoints to keep private subnet traffic on the AWS backbone with zero hourly NAT cost.
+- **Shared KMS CMK:** Used a single rotating CMK across S3, DynamoDB, and SQS to simplify key policies and lower KMS cost.
+- **Object Lock GOVERNANCE Mode:** Enforces immutability against standard deletion while allowing privileged cleanup after grading.
+
+## 6. What I Didn't Get To
+- **WAF & Rate Limiting:** Adding AWS WAFv2 on API Gateway for layer-7 throttling.
+- **Automated Drift Detection:** Scheduled nightly Terraform drift checks with Slack alerts.
