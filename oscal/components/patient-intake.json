@@ -1,0 +1,54 @@
+{
+  "component-definition": {
+    "uuid": "9c7f5321-a2b5-4d7e-9a23-000000000002",
+    "metadata": {
+      "title": "Acme Health Patient Intake API Component Definition",
+      "last-modified": "2026-11-12T00:00:00Z",
+      "version": "1.0.0",
+      "oscal-version": "1.1.2"
+    },
+    "components": [{
+      "uuid": "11111111-2222-4333-8444-555555555555",
+      "type": "service",
+      "title": "Patient Intake Serverless API",
+      "description": "Hardened API Gateway, VPC Lambda, KMS DynamoDB, and S3.",
+      "control-implementations": [{
+        "uuid": "22222222-3333-4444-8555-666666666666",
+        "source": "oscal/profiles/soc2-minimum.json",
+        "description": "SOC 2 Type II Controls",
+        "implemented-requirements": [
+          {
+            "uuid": "33333333-4444-4555-8666-777777777701",
+            "control-id": "cc6.1",
+            "description": "CMK KMS encryption enforced on S3 uploads (GAP-01) and DynamoDB intake table (GAP-02); validated by s3_encryption.rego and dynamodb_encryption.rego."
+          },
+          {
+            "uuid": "33333333-4444-4555-8666-777777777702",
+            "control-id": "cc6.3",
+            "description": "Lambda IAM role scoped to PutItem/GetItem and PutObject/GetObject (GAP-07); validated by iam_least_privilege.rego."
+          },
+          {
+            "uuid": "33333333-4444-4555-8666-777777777703",
+            "control-id": "cc6.6",
+            "description": "Lambda deployed in private VPC subnets with Gateway Endpoints and public S3 access blocked (GAP-05); validated by lambda_vpc.rego."
+          },
+          {
+            "uuid": "33333333-4444-4555-8666-777777777704",
+            "control-id": "cc6.7",
+            "description": "S3 bucket policy denies non-TLS requests via aws:SecureTransport=false (GAP-03)."
+          },
+          {
+            "uuid": "33333333-4444-4555-8666-777777777705",
+            "control-id": "cc7.2",
+            "description": "CloudTrail, API Gateway access logs (GAP-08), and X-Ray active tracing enabled."
+          },
+          {
+            "uuid": "33333333-4444-4555-8666-777777777706",
+            "control-id": "a1.2",
+            "description": "S3 versioning (GAP-04), DynamoDB PITR, SQS DLQ (GAP-06), and Object Lock GOVERNANCE Evidence Vault enabled; validated by s3_versioning.rego."
+          }
+        ]
+      }]
+    }]
+  }
+}

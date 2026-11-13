@@ -1,0 +1,17 @@
+{
+  "profile": {
+    "uuid": "8b6e4210-91a4-4c6d-8f12-000000000001",
+    "metadata": {
+      "title": "Acme Health SOC 2 Type II Minimum Baseline Profile",
+      "last-modified": "2026-11-12T00:00:00Z",
+      "version": "1.0.0",
+      "oscal-version": "1.1.2"
+    },
+    "imports": [{
+      "href": "https://aicpa.org/soc2/tsc-2017.json",
+      "include-controls": [{
+        "with-ids": ["cc6.1", "cc6.2", "cc6.3", "cc6.6", "cc6.7", "cc7.2", "a1.2"]
+      }]
+    }]
+  }
+}
