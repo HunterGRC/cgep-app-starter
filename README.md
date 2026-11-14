@@ -1,24 +1,21 @@
-# Acme Health Patient Intake API — CGE-P Capstone (SOC 2 Type II)
+# SOC 2 Type II Continuous Assurance & GRC Engineering Pipeline
 
-Hardened serverless patient intake API enforcing **SOC 2 Type II** controls (`CC6.1`, `CC6.2`, `CC6.3`, `CC6.6`, `CC6.7`, `CC7.2`, `A1.2`) with Terraform, OPA/Conftest, Cosign keyless signing, S3 Object Lock, and OSCAL 1.1.2.
+Welcome to my **CGE-P** capstone repo. I hardened a serverless AWS Patient Intake API (8 gaps) with **SOC 2 Type II** controls (`CC6.1`-`A1.2`).
 
-## Grader Verification Instructions
+> **Note:** Live AWS resources are torn down ($0 cost) and CI/CD is manual-only (`workflow_dispatch`).
 
-1. **Run OPA Rego Policy Unit Tests (5 policies, 10 tests):**
-    opa test ./policies -v
+## What This Repo Demonstrates
+- **Hardened AWS IaC (`terraform/`):** Rotating KMS CMK, private VPC + Gateway Endpoints, least-privilege IAM, TLS, CloudTrail, SQS DLQ, and S3 Object Lock (`GOVERNANCE`) Vault.
+- **Policy-as-Code (`policies/`):** 5 OPA/Rego policies with 10 unit tests enforced via Conftest.
+- **Keyless CI/CD (`.github/workflows/grc-gate.yml`):** 5-stage pipeline using GitHub OIDC, keyless Sigstore Cosign signing, and SHA-256 digests.
+- **OSCAL 1.1.2 (`oscal/`):** Profile and component definition validated with Compliance Trestle.
 
-2. **Verify Signed Evidence Bundle in S3 Vault:**
-    EVIDENCE_VAULT="acme-health-intake-evidence-6b08c38c" bash scripts/verify-evidence.sh 43334898425
+## Key Artifacts
+- **Green PR:** [PR #1](https://github.com/HunterGRC/cgep-app-starter/pull/1) | **Red PR (Blocked):** [PR #2](https://github.com/HunterGRC/cgep-app-starter/pull/2)
+- **Full Writeup & Traceability Matrix:** See [`WRITEUP.md`](WRITEUP.md)
 
-3. **Validate OSCAL 1.1.2 Profile & Component with Trestle:**
-    mkdir -p /tmp/tws && cd /tmp/tws && trestle init
-    mkdir -p profiles/soc2 component-definitions/intake
-    cp "$OLDPWD/oscal/profiles/soc2-minimum.json" profiles/soc2/profile.json
-    cp "$OLDPWD/oscal/components/patient-intake.json" component-definitions/intake/component-definition.json
-    trestle validate -f profiles/soc2/profile.json
-    trestle validate -f component-definitions/intake/component-definition.json
+## Local Verification (No AWS Required)
+Run `opa test ./policies -v` to execute all 5 Rego policies and 10 unit tests.
 
-4. **PR History & Architecture Writeup:**
-- Green PR (Merged): PR #1 (`feat/soc2-grc-baseline`)
-- Red PR (Blocked by Gate): PR #2 (`test/reintroduce-gap-07`)
-- Full Writeup: See `WRITEUP.md`
+## Tech Stack
+`AWS` | `Terraform` | `OPA/Rego` | `Conftest` | `GitHub Actions` | `OIDC` | `Sigstore Cosign` | `S3 Object Lock` | `OSCAL 1.1.2`
