@@ -48,3 +48,17 @@ This confirms S3 Object Lock (GOVERNANCE), SHA-256 digest, and Sigstore OIDC ide
 ## 6. What I Didn't Get To
 - **WAF & Rate Limiting:** Adding AWS WAFv2 on API Gateway for layer-7 throttling.
 - **Automated Drift Detection:** Scheduled nightly Terraform drift checks with Slack alerts.
+
+## 7. Bidirectional Traceability Matrix
+
+### 7.1 Control-to-Artifact Mapping (Control -> Code, Policy & Evidence)
+| SOC 2 Control | Terraform Resource | OPA Rego Policy & Test | OSCAL Requirement UUID |
+| :--- | :--- | :--- | :--- |
+| CC6.1 | aws_kms_key.workload, aws_s3_bucket_server_side_encryption_configuration.uploads, aws_dynamodb_table.intake | s3_encryption.rego, dynamodb_encryption.rego | 33333333-4444-4555-8666-777777777701 |
+| CC6.3 | aws_iam_role_policy.lambda_policy | iam_least_privilege.rego | 33333333-4444-4555-8666-777777777702 |
+| CC6.6 | aws_lambda_function.intake (vpc_config), aws_vpc_endpoint.s3, aws_vpc_endpoint.dynamodb | lambda_vpc.rego | 33333333-4444-4555-8666-777777777703 |
+| CC6.7 | aws_s3_bucket_policy.uploads_tls | Infrastructure baseline | 33333333-4444-4555-8666-777777777704 |
+| CC7.2 | aws_cloudtrail.main, aws_apigatewayv2_stage.default | Infrastructure baseline | 33333333-4444-4555-8666-777777777705 |
+| A1.2 | aws_s3_bucket_versioning.uploads, aws_sqs_queue.lambda_dlq, aws_s3_bucket_object_lock_configuration.evidence | A1.2 | aws_s3_bucket_versioning.uploads, aws_sqs_queue.lambda_dlq, 2 Ar| A1.2 | aws_s3_bucket_versioning.uploads, aws_sqs_queue.lambda_dlq, aws_s3_bucketPurpose | Mapped SOC 2 Controls |
+| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| :| : CloudTrail | CC7.2, A1.2 |
+| policies/*.rego | Pre-merge Conftest policy gate & unit tests | CC6.1, CC6.2, CC6.3,| policies/*.rego | Pre-merge Conftest policy gate & unit tests | CC6.1, CC6.2, CC6.3,| policies/*.rego | Pre-merge Conftest policy gate & unit tests | CCtient-intake.json | Machine-readable OSCAL 1.1.2 component definition | CC6.1, CC6.3, CC6.6, CC6.7, CC7.2, A1.2 |
